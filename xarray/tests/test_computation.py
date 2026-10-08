@@ -1922,6 +1922,53 @@ def test_where() -> None:
     assert_identical(expected, actual)
 
 
+@pytest.mark.parametrize("as_variable", [True, False])
+@pytest.mark.parametrize("keep_attrs", [True, False, None])
+@pytest.mark.parametrize("global_keep_attrs", [True, False])
+def test_where_keep_attrs(as_variable, keep_attrs, global_keep_attrs):
+    cond = xr.DataArray([True, False], dims="dim", attrs={"source": "condition"})
+    x = xr.DataArray(
+        np.array([10, 20], dtype=np.int8),
+        dims="dim",
+        attrs={"source": "x", "units": "m"},
+    )
+    y = xr.DataArray(
+        np.array([30, 40], dtype=np.int8), dims="dim", attrs={"source": "y"}
+    )
+    if as_variable:
+        cond, x, y = cond.variable, x.variable, y.variable
+    with xr.set_options(keep_attrs=global_keep_attrs):
+        actual = xr.where(cond, x, y, keep_attrs=keep_attrs)
+    expected_keep = global_keep_attrs if keep_attrs is None else keep_attrs
+    expected = xr.DataArray(
+        np.array([10, 40], dtype=np.int8),
+        dims="dim",
+        attrs=x.attrs if expected_keep else {},
+    )
+    if as_variable:
+        expected = expected.variable
+    assert_identical(actual, expected)
+    assert actual.dtype == np.dtype("int8")
+    assert x.attrs == {"source": "x", "units": "m"}
+    assert cond.attrs == {"source": "condition"}
+    assert y.attrs == {"source": "y"}
+
+
+def test_where_default_drops_attrs():
+    x = xr.DataArray([10, 20], dims="dim", attrs={"units": "m"})
+    with xr.set_options(keep_attrs="default"):
+        actual = xr.where([True, False], x, 0)
+    assert_identical(actual, xr.DataArray([10, 0], dims="dim"))
+
+
+@pytest.mark.parametrize("keep_attrs", [True, False])
+def test_where_scalar_x_attrs(keep_attrs):
+    cond = xr.DataArray([True, False], dims="dim", attrs={"source": "condition"})
+    y = xr.DataArray([30, 40], dims="dim", attrs={"source": "y"})
+    actual = xr.where(cond, 5, y, keep_attrs=keep_attrs)
+    assert_identical(actual, xr.DataArray([5, 40], dims="dim"))
+
+
 @pytest.mark.parametrize("use_dask", [True, False])
 @pytest.mark.parametrize("use_datetime", [True, False])
 def test_polyval(use_dask, use_datetime) -> None:
